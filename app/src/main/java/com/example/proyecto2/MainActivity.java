@@ -1,8 +1,14 @@
 package com.example.proyecto2;
 
+import android.Manifest;
 import android.content.Intent;
-import android.os.Build;
+import android.content.IntentSender;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
 import android.os.Bundle;
+import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
@@ -12,8 +18,21 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
+import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.location.LocationSettingsResponse;
+import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -21,12 +40,41 @@ import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 
+import java.io.IOException;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnInitListener{
+    int LOCATION_REQUEST_CODE = 10001;
+    GeoPoint myCurrentLocation;
+    String myAddress;
+    FusedLocationProviderClient fusedLocationProviderClient;
+    LocationRequest locationRequest;
+    LocationCallback locationCallback= new LocationCallback() {
+        @Override
+        public void onLocationResult(LocationResult locationResult) {
+            if(locationResult ==null){
+                return;
+            }
+            for(Location location: locationResult.getLocations()) {
+                //Log.d(TAG, "onLocationResult: " + location.toString());
+                try {
+                    Geocoder geocoder=new Geocoder(MainActivity.this, Locale.getDefault());
+                    List<Address> addresses = geocoder.getFromLocation(location.getLatitude(),location.getLongitude(),1);
+                    myCurrentLocation= new GeoPoint(location.getLatitude(),location.getLongitude());
+                    myAddress=addresses.get(0).getAddressLine(0);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+
+            }
+        }
+    };
+
     private static final int RECONOCEDOR_VOZ=7;
     private TextView escuchando;
     private TextView respuesta;
@@ -60,6 +108,11 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 }
             }
         });
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
+        locationRequest = LocationRequest.create();
+        locationRequest.setInterval(4000);
+        locationRequest.setFastestInterval(2000);
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
@@ -84,9 +137,11 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 respuesta = respuest.get(i).getRespuestas();
             }
         }
-        if(respuesta.compareTo("lmcp")==0)
-        {   lugarMasCercano("Panadería");
-            return;
+        switch (sintilde.toLowerCase()){
+            case "panaderia mas cercana": lugarMasCercano("Panadería");
+                        return;
+            case "mi ubicacion":
+                        respuesta="tu ubicacion es: "+myAddress+", con coordenadas: "+" latitud:"+myCurrentLocation.getLatitude()+" longitud:"+myCurrentLocation.getLongitude();
         }
         responder(respuesta);
     }
@@ -120,12 +175,83 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         respuestas.add(new Respuestas("adios", "que descanses"));
         respuestas.add(new Respuestas("como estas", "esperando serte de ayuda"));
         respuestas.add(new Respuestas("nombre", "mis amigos me llaman Mina"));
-        respuestas.add(new Respuestas("panaderia mas cercana", "lmcp"));
 
         return respuestas;
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)== PackageManager.PERMISSION_GRANTED){
+            checkSettingsAndStartLocationUpdates();
+        }
+        else{
+            askLocationPermission();
+        }
+    }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        stopLocationUpdates();
+    }
+    private void checkSettingsAndStartLocationUpdates() {
+        LocationSettingsRequest request = new LocationSettingsRequest.Builder()
+                .addLocationRequest(locationRequest).build();
+        SettingsClient client = LocationServices.getSettingsClient(this);
+
+        Task<LocationSettingsResponse> locationSettingsResponseTask = client.checkLocationSettings(request);
+        locationSettingsResponseTask.addOnSuccessListener(new OnSuccessListener<LocationSettingsResponse>() {
+            @Override
+            public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
+                //Settings of device are satisfied and we can start location updates
+                startLocationUpdates();
+            }
+        });
+        locationSettingsResponseTask.addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                if (e instanceof ResolvableApiException) {
+                    ResolvableApiException apiException = (ResolvableApiException) e;
+                    try {
+                        apiException.startResolutionForResult(MainActivity.this, 1001);
+                    } catch (IntentSender.SendIntentException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        });
+    }
+    private void startLocationUpdates() {
+        try {
+            fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+        }catch (SecurityException s){
+            Log.d("xd", s.toString());
+        }
+    }
+    private void stopLocationUpdates() {
+        fusedLocationProviderClient.removeLocationUpdates(locationCallback);
+    }
+    private void askLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+                Log.d(TAG, "askLocationPermission: you should show an alert dialog...");
+                ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST_CODE);
+            } else {
+                ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST_CODE);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == LOCATION_REQUEST_CODE) {
+            if (grantResults.length >0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted
+                checkSettingsAndStartLocationUpdates();
+            }
+        }
+    }
 
     private void lugarMasCercano(String Lugar){                 /*falta el radio*/
         db.collection("lugaresGeneral")
@@ -140,7 +266,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                             for(QueryDocumentSnapshot document: task.getResult()){
                                 Map<String, Object> data = document.getData();
                                 GeoPoint point= (GeoPoint) data.get("gps");
-                                int dis=calculateDistanceByHaversineFormula(-70.284974,-18.447101,point.getLongitude(),point.getLatitude());
+                                int dis=calculateDistanceByHaversineFormula(myCurrentLocation.getLongitude(),myCurrentLocation.getLatitude(),point.getLongitude(),point.getLatitude());
                                 if(dis< distanciaMenor){
                                     distanciaMenor=dis;
                                     idMenor=document.getId();
@@ -149,8 +275,8 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                                 }
 
                             }
-                            speak("El lugar mas cercano es: "+idMenor+", con una distancia de: "+String.valueOf(distanciaMenor)+" kilometros");
-                            respuesta.setText("El lugar mas cercano es: "+idMenor+", con una distancia de: "+String.valueOf(distanciaMenor)+" kilometros");
+                            speak("El lugar mas cercano es: "+idMenor+", con una distancia de: "+String.valueOf(distanciaMenor)+" Metros");
+                            respuesta.setText("El lugar mas cercano es: "+idMenor+", con una distancia de: "+String.valueOf(distanciaMenor)+" Metros");
                         }else{
                             Log.d("xd","Error getting documents:", task.getException());
                         }
