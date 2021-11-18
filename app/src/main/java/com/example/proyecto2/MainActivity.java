@@ -13,6 +13,7 @@ import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -51,6 +52,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     int LOCATION_REQUEST_CODE = 10001;
     GeoPoint myCurrentLocation;
     String myAddress;
+    Button button1;
     FusedLocationProviderClient fusedLocationProviderClient;
     LocationRequest locationRequest;
     LocationCallback locationCallback= new LocationCallback() {
@@ -92,6 +94,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        button1=findViewById(R.id.button1);
         tv1=findViewById(R.id.text1);
         inicializar();
         mTTS=new TextToSpeech(this, new TextToSpeech.OnInitListener() {
@@ -106,6 +109,12 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 else{
                     Log.e("TTS","Initialization failed");
                 }
+            }
+        });
+        button1.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                prepararRespuesta("panaderia a 3000 metros");
             }
         });
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
@@ -125,27 +134,68 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
             prepararRespuesta(escuchado);
         }
     }
-    private void prepararRespuesta(String escuchado) {
-        String normalizar = Normalizer.normalize(escuchado, Normalizer.Form.NFD);
+    private String limpiarPalabra(String palabra)
+    {   String normalizar = Normalizer.normalize(palabra, Normalizer.Form.NFD);
         String sintilde = normalizar.replaceAll("[^\\p{ASCII}]", "");
-
+        String loEscuchado= sintilde.toLowerCase();
+        return loEscuchado;
+    }
+    private void prepararRespuesta(String escuchado) {/*incluyendo limpia palabra*/
+        String loEscuchado= limpiarPalabra(escuchado);
         int resultado;
         String respuesta = respuest.get(0).getRespuestas();
         for (int i = 0; i < respuest.size(); i++) {
-            resultado = sintilde.toLowerCase().indexOf(respuest.get(i).getCuestion());
+            resultado = loEscuchado.indexOf(respuest.get(i).getCuestion());
             if(resultado != -1){
                 respuesta = respuest.get(i).getRespuestas();
             }
+        }/*receso, hay que simplificar, poner un vector de tipoLugar, buscar si lo escuchado contiene alguno, y hacer que detecte los metros*/
+        if((loEscuchado.contains("mas cercanos")||loEscuchado.contains("mas cercanas")) && loEscuchado.contains("metros"))
+        {   StringBuilder dato=new StringBuilder("");
+            String tipoLugar=new String("");
+            int metros=1000;
+            for (int i=0;i<loEscuchado.length();i++){
+                if(loEscuchado.charAt(i)!=' ')
+                {dato.append(loEscuchado.charAt(i));}
+                else {
+                    if(siguientePalabra(i,loEscuchado)=="mas")
+                    {tipoLugar=dato.toString();}
+                    if(siguientePalabra(i,loEscuchado)=="metros")
+                    {metros=Integer.valueOf(dato.toString());}
+                    dato=new StringBuilder("");
+                }
+
+            }
+            escuchando.setText(tipoLugar+","+String.valueOf(metros));
+            lugaresMasCercanos(tipoLugar, metros);
+            return;
         }
-        switch (sintilde.toLowerCase()){
+        switch (loEscuchado){
             case "panaderia mas cercana": lugarMasCercano("Panadería");
                         return;
             case "mi ubicacion":
                         respuesta="tu ubicacion es: "+myAddress+", con coordenadas: "+" latitud:"+myCurrentLocation.getLatitude()+" longitud:"+myCurrentLocation.getLongitude();
         }
-        responder(respuesta);
-    }
 
+        responder(respuesta);
+
+    }
+    private String siguientePalabra(int indice,String oracion){
+        StringBuilder buffer=new StringBuilder("");
+        int i=0;
+        while(oracion.charAt(i)==' ' && i<oracion.length())i++;
+        for (;i<oracion.length();i++)
+        {   if(oracion.charAt(i)!=' ')
+            {buffer.append(oracion.charAt(i));}
+            else{
+            return buffer.toString();
+            }
+        }
+        if(!buffer.toString().isEmpty())
+        { return buffer.toString();
+        }
+        return "";
+    }
     private void responder(String respuestita) {
         respuesta.setText(respuestita);
         leer.speak(respuestita,TextToSpeech.QUEUE_FLUSH,null,null);
@@ -252,8 +302,41 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
             }
         }
     }
+    private void lugaresMasCercanos(String Lugar, int radio){
+        db.collection("lugaresGeneral")
+                .whereEqualTo("tipoLugar", Lugar)
+                .get()
+                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                    @Override
+                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                        if(task.isSuccessful()){
+                            int contadorListado=1;
 
-    private void lugarMasCercano(String Lugar){                 /*falta el radio*/
+                            ArrayList<String> posiblesLugares=new ArrayList<>();
+                            speak(Lugar);
+                            speak(String.valueOf(radio));
+                            speak("se encontraron los siguientes lugares posicion, IDlugar");
+                            for(QueryDocumentSnapshot document: task.getResult()){
+                                Map<String, Object> data = document.getData();
+                                GeoPoint point= (GeoPoint) data.get("gps");
+                                int dis=calculateDistanceByHaversineFormula(myCurrentLocation.getLongitude(),myCurrentLocation.getLatitude(),point.getLongitude(),point.getLatitude());
+                                if(dis<= radio){
+                                    posiblesLugares.add(String.valueOf(contadorListado)+","+document.getId());
+                                    speak("posicion: "+contadorListado+", IDlugar: "+document.getId()+", con una distancia de: "+String.valueOf(dis)+" Metros");
+                                    contadorListado++;
+                                }
+                            }
+                            //speak(posiblesLugares.toString());
+                            respuesta.setText(posiblesLugares.toString());
+
+                            //digitar el numero asociado al lugar
+                        }else{
+                            Log.d("xd","Error getting documents:", task.getException());
+                        }
+                    }
+                });
+    }
+    private void lugarMasCercano(String Lugar){
         db.collection("lugaresGeneral")
                 .whereEqualTo("tipoLugar", Lugar)
                 .get()
@@ -284,7 +367,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 });
     }
     private void speak(String text){
-        mTTS.speak(text,TextToSpeech.QUEUE_FLUSH,null);
+        mTTS.speak(text,TextToSpeech.QUEUE_ADD,null);
     }
     private static int calculateDistanceByHaversineFormula(double lon1, double lat1, double lon2, double lat2) {
         double earthRadius = 6371; // km
