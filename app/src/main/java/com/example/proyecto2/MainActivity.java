@@ -49,6 +49,8 @@ import java.util.Locale;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnInitListener{
+
+    ArrayList<String> lugaresGeneral=new ArrayList<>();
     int LOCATION_REQUEST_CODE = 10001;
     GeoPoint myCurrentLocation;
     String myAddress;
@@ -94,6 +96,10 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //añadiendo los tipos de lugares
+        lugaresGeneral.add("Panadería");
+
+
         button1=findViewById(R.id.button1);
         tv1=findViewById(R.id.text1);
         inicializar();
@@ -114,7 +120,8 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         button1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                prepararRespuesta("panaderia a 3000 metros");
+                prepararRespuesta("consulta lugar panaderia 1000 metros");
+
             }
         });
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
@@ -149,25 +156,15 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
             if(resultado != -1){
                 respuesta = respuest.get(i).getRespuestas();
             }
-        }/*receso, hay que simplificar, poner un vector de tipoLugar, buscar si lo escuchado contiene alguno, y hacer que detecte los metros*/
-        if((loEscuchado.contains("mas cercanos")||loEscuchado.contains("mas cercanas")) && loEscuchado.contains("metros"))
-        {   StringBuilder dato=new StringBuilder("");
-            String tipoLugar=new String("");
-            int metros=1000;
-            for (int i=0;i<loEscuchado.length();i++){
-                if(loEscuchado.charAt(i)!=' ')
-                {dato.append(loEscuchado.charAt(i));}
-                else {
-                    if(siguientePalabra(i,loEscuchado)=="mas")
-                    {tipoLugar=dato.toString();}
-                    if(siguientePalabra(i,loEscuchado)=="metros")
-                    {metros=Integer.valueOf(dato.toString());}
-                    dato=new StringBuilder("");
-                }
-
-            }
-            escuchando.setText(tipoLugar+","+String.valueOf(metros));
-            lugaresMasCercanos(tipoLugar, metros);
+        }
+        ArrayList<String> sentencia;
+        if(loEscuchado.contains("consulta")
+                && loEscuchado.contains("lugar")
+                &&(sentencia=stringToList(loEscuchado)).size()>=4
+                && containsLimpio(sentencia.get(2),lugaresGeneral))
+        {   int metros=Integer.valueOf(sentencia.get(3));
+            String tipoLugar=containsMatch(sentencia.get(2),lugaresGeneral);
+            lugaresMasCercanos(tipoLugar,metros);
             return;
         }
         switch (loEscuchado){
@@ -179,6 +176,37 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
 
         responder(respuesta);
 
+    }
+    private String containsMatch(String nombre, ArrayList<String> lista){
+        for(String item:lista){
+            if(limpiarPalabra(item).compareTo(nombre)==0){return item;}
+        }
+        return "";
+    }
+    private boolean containsLimpio(String nombre, ArrayList<String> lista){
+        for (String item:lista){
+            if(limpiarPalabra(item).compareTo(nombre)==0){return true;}
+        }
+        return false;
+    }
+    private ArrayList<String> stringToList(String buffer){
+        ArrayList<String> list=new ArrayList<>();
+        StringBuilder tarp= new StringBuilder("");
+        for (int i=0;i<buffer.length();i++)
+        {   if(buffer.charAt(i)!=' '){
+            tarp.append(buffer.charAt(i));
+        }
+        else{
+            list.add(tarp.toString());
+            tarp=new StringBuilder("");
+        }
+
+        }
+        if(!tarp.toString().isEmpty())
+        {
+            list.add(tarp.toString());
+        }
+        return list;
     }
     private String siguientePalabra(int indice,String oracion){
         StringBuilder buffer=new StringBuilder("");
@@ -316,6 +344,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                             speak(Lugar);
                             speak(String.valueOf(radio));
                             speak("se encontraron los siguientes lugares posicion, IDlugar");
+
                             for(QueryDocumentSnapshot document: task.getResult()){
                                 Map<String, Object> data = document.getData();
                                 GeoPoint point= (GeoPoint) data.get("gps");
@@ -353,8 +382,6 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                                 if(dis< distanciaMenor){
                                     distanciaMenor=dis;
                                     idMenor=document.getId();
-                                    //Log.d("xd",document.getId()+" d:"+ String.valueOf(dis));
-
                                 }
 
                             }
