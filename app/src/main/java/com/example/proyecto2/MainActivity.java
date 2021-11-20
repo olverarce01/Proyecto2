@@ -105,7 +105,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         button1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                prepararRespuesta("consulta lugar panaderia 1000 metros");
+                prepararRespuesta("consulta Arica Foods");
 
             }
         });
@@ -139,6 +139,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         return respuestas;
     }
     private void prepararRespuesta(String escuchado) {
+        escuchando.setText(escuchado);
         String loEscuchado= limpiarPalabra(escuchado);
         int resultado;
         String respuesta = respuest.get(0).getRespuestas();
@@ -175,6 +176,12 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
             lugarMasCercano(tipoLugar);
             return;
         }
+        if(loEscuchado.contains("consulta")  /*ej: consulta idLugar*/
+                &&(sentencia=stringToList(loEscuchado)).size()>=2)
+        {   sentencia.remove(0);
+            obtenerDestino(sentencia,"lugaresGeneral");
+            return;
+        }
         switch (loEscuchado){
             case "panaderia mas cercana": lugarMasCercano("Panadería");
                         return;
@@ -200,12 +207,10 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                     public void onComplete(@NonNull Task<QuerySnapshot> task) {
                         if(task.isSuccessful()){
                             int contadorListado=1;
-
                             ArrayList<String> posiblesLugares=new ArrayList<>();
                             speak(Lugar);
                             speak(String.valueOf(radio));
                             speak("se encontraron los siguientes lugares posicion, IDlugar");
-
                             for(QueryDocumentSnapshot document: task.getResult()){
                                 Map<String, Object> data = document.getData();
                                 GeoPoint point= (GeoPoint) data.get("gps");
@@ -216,10 +221,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                                     contadorListado++;
                                 }
                             }
-                            //speak(posiblesLugares.toString());
                             respuesta.setText(posiblesLugares.toString());
-
-                            //digitar el numero asociado al lugar
                         }else{
                             Log.d("xd","Error getting documents:", task.getException());
                         }
@@ -255,16 +257,18 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                     }
                 });
     }
-    private void obtenerDestino(String destino, String contexto){
-        db.collection("lugaresGeneral")
+    private void obtenerDestino(ArrayList<String> destino, String contexto){
+        db.collection(contexto)
                 .get()
                 .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                     @Override
                     public void onComplete(@NonNull Task<QuerySnapshot> task) {
                         for(QueryDocumentSnapshot document: task.getResult()){
-                            for (String w: stringToList(destino))
+                            for (String w: destino)
                             { if(document.getId().contains(w)){
-                               iniciarRuta(document.getId(),document.getData().get("detalles").toString(),document.getData().get("direccion").toString(),(GeoPoint) document.getData().get("gps"));
+                                respuesta.setText(document.getData().get("direccion").toString());
+
+                                iniciarRuta(document.getId(),document.getData().get("detalles").toString(),document.getData().get("direccion").toString(),(GeoPoint) document.getData().get("gps"));
                                return;
                               }
                             }
@@ -273,11 +277,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 });
     }
     private  void iniciarRuta(String id, String detalles, String direccion, GeoPoint gps){
-
-        while(10>calculateDistanceByHaversineFormula(myCurrentLocation.getLongitude(),myCurrentLocation.getLatitude(),gps.getLongitude(),gps.getLatitude()))
-        {
-
-        }
+        speak("id: "+id+", direccion:"+direccion+", detalles:"+detalles);
     }
     private String containsMatch(String nombre, ArrayList<String> lista){
         for(String item:lista){
@@ -343,7 +343,6 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         if(resultCode == RESULT_OK && requestCode == RECONOCEDOR_VOZ){
             ArrayList<String> reconocido = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             String escuchado = reconocido.get(0);
-            escuchando.setText(escuchado);
             prepararRespuesta(escuchado);
         }
     }
