@@ -1,24 +1,36 @@
 package com.example.proyecto2;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.graphics.Rect;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
+import android.media.Image;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
+import android.util.SparseIntArray;
+import android.view.Surface;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -40,15 +52,23 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.GeoPoint;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.objects.DetectedObject;
+import com.google.mlkit.vision.objects.ObjectDetection;
+import com.google.mlkit.vision.objects.ObjectDetector;
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions;
+import com.google.mlkit.vision.objects.defaults.PredefinedCategory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnInitListener{
+public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnInitListener {
+
     private Button button1;
     private TextView escuchando,respuesta;
     TextView tv1;
@@ -56,6 +76,9 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     LocationRequest locationRequest;
     private TextToSpeech leer,mTTS;
     private int LOCATION_REQUEST_CODE = 10001;
+    private static final String[] CAMERA_PERMISSION = new String[]{Manifest.permission.CAMERA};
+    private static final int CAMERA_REQUEST_CODE = 10;
+
     private GeoPoint myCurrentLocation;
     private String myAddress;
     private ArrayList<String> lugaresGeneral=new ArrayList<>();
@@ -63,6 +86,7 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     private static final int RECONOCEDOR_VOZ=7;
     private ArrayList<Respuestas> respuest;
     private static final String TAG= "MainActivity";
+
     LocationCallback locationCallback= new LocationCallback() {
         @Override
         public void onLocationResult(LocationResult locationResult) {
@@ -87,7 +111,9 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);inicializar();
+        setContentView(R.layout.activity_main);
+
+        inicializar();
         mTTS=new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
             public void onInit(int status) {
@@ -102,14 +128,22 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 }
             }
         });
+
+
         button1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                prepararRespuesta("consulta Arica Foods");
+                if (hasCameraPermission()) {
+                    enableCamera();
+                } else {
+                    requestPermission();
+                }
 
             }
         });
+
     }
+
     private void inicializar() {
         escuchando = findViewById(R.id.tvEscuchando);
         respuesta= findViewById(R.id.tvRespondiendo);
@@ -127,6 +161,23 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
         lugaresEmergencia.add("Parada");
         lugaresEmergencia.add("hospital");
 
+    }
+    private boolean hasCameraPermission() {
+        return ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED;
+    }
+    private void requestPermission() {
+        ActivityCompat.requestPermissions(
+                this,
+                CAMERA_PERMISSION,
+                CAMERA_REQUEST_CODE
+        );
+    }
+    private void enableCamera() {
+        Intent intent = new Intent(this, CameraActivity.class);
+        startActivity(intent);
     }
     public ArrayList<Respuestas> proveerDatos(){
         ArrayList<Respuestas> respuestas = new ArrayList<>();
@@ -414,12 +465,14 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
     }
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == LOCATION_REQUEST_CODE) {
-            if (grantResults.length >0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission granted
                 checkSettingsAndStartLocationUpdates();
             }
         }
+
     }
 
 
