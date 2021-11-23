@@ -113,6 +113,7 @@ public class CameraActivity extends AppCompatActivity{
                                         if (PredefinedCategory.FOOD_INDEX == index) {
                                         }
                                         float confidence = label.getConfidence();
+                                        textView.setText("objeto: "+label.getText()+" confidence:"+label.getConfidence());
                                         Log.d("xd", "objeto: "+label.getText()+" index: "+label.getIndex()+" confidence:"+label.getConfidence());
                                     }
 
