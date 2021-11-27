@@ -46,14 +46,16 @@ public class CameraActivity extends AppCompatActivity{
     private PreviewView previewView;
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
     private TextView textView;
-    private String bufferObject="";
+    private int bufferObject;
     private TextToSpeech mTTS;
     private FirebaseTranslator englishEspanishTranslator;
     private FrameLayout frameLayout;
+    private boolean modeloDescargado;
     Draw marco;
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        modeloDescargado=false;
         setContentView(R.layout.activity_camera);
         FirebaseTranslatorOptions optionsTranslate=
                 new FirebaseTranslatorOptions.Builder()
@@ -69,7 +71,7 @@ public class CameraActivity extends AppCompatActivity{
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
                     public void onSuccess(@NonNull Void unused) {
-                        //model descargo
+                        modeloDescargado=true;
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
@@ -138,7 +140,7 @@ public class CameraActivity extends AppCompatActivity{
                                     .setDetectorMode(CustomObjectDetectorOptions.STREAM_MODE)
                                     .enableClassification()
                                     .setClassificationConfidenceThreshold(0.5f)
-                                    .setMaxPerObjectLabelCount(3)
+                                    .setMaxPerObjectLabelCount(1)
                                     .build();
                     ObjectDetector objectDetector =
                             ObjectDetection.getClient(customObjectDetectorOptions);
@@ -147,8 +149,21 @@ public class CameraActivity extends AppCompatActivity{
                             .addOnSuccessListener(detectedObjects -> {
                                 for (DetectedObject detectedObject : detectedObjects) {
                                     Rect boundingBox = detectedObject.getBoundingBox();
-                                    crearMarco(boundingBox,detectedObject);
+                                    String nombre=detectedObject.getLabels().get(0).getText();
                                     Integer trackingId = detectedObject.getTrackingId();
+                                    if(bufferObject!=trackingId){
+                                        bufferObject=trackingId;
+                                        if(modeloDescargado){
+                                            englishEspanishTranslator.translate(nombre)
+                                                    .addOnSuccessListener(new OnSuccessListener<String>() {
+                                                        @Override
+                                                        public void onSuccess(@NonNull String s) {
+                                                            String texto=s+"("+detectedObject.getLabels().get(0).getConfidence()+")";
+                                                            crearMarco(boundingBox,texto);
+                                                        }
+                                                    });
+                                        }
+                                    }
                                     for (DetectedObject.Label label : detectedObject.getLabels()) {
                                         String text = label.getText();
                                         if (PredefinedCategory.FOOD.equals(text)) {
@@ -156,21 +171,7 @@ public class CameraActivity extends AppCompatActivity{
                                         int index = label.getIndex();
                                         if (PredefinedCategory.FOOD_INDEX == index) {
                                         }
-                                        float d=label.getConfidence();
-                                        float confidence = label.getConfidence();
-                                        if(bufferObject!=label.getText()){
-                                            bufferObject=label.getText();
-                                            /*
-                                            englishEspanishTranslator.translate(label.getText())
-                                                    .addOnSuccessListener(new OnSuccessListener<String>() {
-                                                        @Override
-                                                        public void onSuccess(@NonNull String s) {
-                                                            textView.setText(s);
-                                                        }
-                                                    });*/
-                                            //textView.setText("objeto: "+label.getText()+" confidence:"+d);
-                                            //speak(label.getText()+" con un porcentaje de confianza del:"+label.getConfidence());
-                                        }
+
 
                                     }
 
@@ -186,9 +187,9 @@ public class CameraActivity extends AppCompatActivity{
         cameraProvider.bindToLifecycle((LifecycleOwner) this, cameraSelector,imageAnalysis,preview);
     }
 
-    private void crearMarco(Rect boundingBox, DetectedObject detectedObject) {
+    private void crearMarco(Rect boundingBox, String texto) {
         if(frameLayout.getChildCount()>1){frameLayout.removeViewAt(1);}
-        marco= new Draw(this,boundingBox,detectedObject.getLabels().get(0).getText());
+        marco= new Draw(this,boundingBox,texto);
         frameLayout.addView(marco);
     }
     private void speak(String text){

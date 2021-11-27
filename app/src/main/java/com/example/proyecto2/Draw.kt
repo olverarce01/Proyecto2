@@ -15,19 +15,21 @@ class Draw(context: Context?, var rect:Rect, var text:String):View(context) {
     }
     private fun init(){
         boundaryPaint=Paint()
-        boundaryPaint.color= Color.BLACK
+        boundaryPaint.color= Color.GREEN
         boundaryPaint.strokeWidth=10f
         boundaryPaint.style=Paint.Style.STROKE
 
         textPaint=Paint()
-        textPaint.color=Color.BLACK
+        textPaint.color=Color.WHITE
         textPaint.strokeWidth=50f
         textPaint.style=Paint.Style.FILL
+        textPaint.textSize=60f
     }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
-        canvas?.drawText(text,rect.centerX().toFloat(),rect.centerY().toFloat(),textPaint)
         canvas?.drawRect(rect.left.toFloat(),rect.top.toFloat(),rect.right.toFloat(),rect.bottom.toFloat(),boundaryPaint)
+        canvas?.drawText(text,rect.centerX().toFloat(),rect.centerY().toFloat(),textPaint)
+
     }
 }

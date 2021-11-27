@@ -200,6 +200,14 @@ public class MainActivity extends AppCompatActivity implements  TextToSpeech.OnI
                 respuesta = respuest.get(i).getRespuestas();
             }
         }
+        if(loEscuchado.contains("detecta")&&loEscuchado.contains("objeto")){
+            if (hasCameraPermission()) {
+                enableCamera();
+            } else {
+                requestPermission();
+            }
+            return;
+        }
         ArrayList<String> sentencia;
         if(loEscuchado.contains("consulta")  /*ej: consulta lugar panadería 1500 metros*/
                 && loEscuchado.contains("lugar")
